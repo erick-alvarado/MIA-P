@@ -24,6 +24,23 @@ def index():
 def cargarTemporal():
     return jsonify({'Message': 'Loaded'})
 
+@app.route('/eliminarTemporal', methods=['GET'])
+def eliminarTemporal():
+    try:
+            stmt = sqlalchemy.text("DELETE FROM temporal")
+            with db.connect() as conn:
+                conn.execute(stmt)
+    except Exception as e:
+        logger.exception(e)
+        return Response(
+            status=500,
+            response="Error al eliminar temporal"
+        )
+    return Response(
+        status=200,
+        response="Temporal eliminado"
+    )
+
 @app.route('/cargarModelo', methods=['GET'])
 def cargarModelo():
     global ddl
