@@ -1,6 +1,12 @@
 import os 
 import sqlalchemy
+import sys
 
+def cargarModeloQuery():
+        f = open('./Database/cargarModelo.sql','r')
+        ddl = f.read().split(';')
+        f.close()
+        return ddl
 def init_connection_engine():
     db_config = {
         "pool_size": 5,
