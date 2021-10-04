@@ -44,6 +44,7 @@ def eliminarTemporal():
 @app.route('/cargarModelo', methods=['GET'])
 def cargarModelo():
     global ddl
+    ddl = cargarModeloQuery()
     try:
         for i in range(size(ddl)-1): 
             stmt = sqlalchemy.text(ddl[i])
@@ -101,8 +102,7 @@ def save_vote():
 
 
 if __name__ == '__main__':
-    global ddl
-    ddl = cargarModeloQuery()
+    
     app.run(port = os.environ["PORT"],debug=True)
     #print("Server on port",5000)
     #serve(app, port= 5000)

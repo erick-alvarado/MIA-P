@@ -13,7 +13,6 @@ DROP TABLE IF EXISTS detalle_categoria CASCADE;
 DROP TABLE IF EXISTS detalle_traduccion CASCADE;
 DROP TABLE IF EXISTS detalle_actor CASCADE;
 
-
 CREATE TABLE categoria (
     id_categoria SERIAL PRIMARY KEY,
     nombre VARCHAR NOT NULL
@@ -54,7 +53,7 @@ CREATE TABLE tienda (
     nombre VARCHAR NOT NULL,
     apellido VARCHAR NOT NULL,
     correo VARCHAR NOT NULL,
-    fecha_registro VARCHAR NOT NULL,
+    fecha_registro DATE NOT NULL,
     activo VARCHAR NOT NULL
 );
  CREATE TABLE pelicula (
@@ -106,3 +105,190 @@ CREATE TABLE tienda (
 ALTER TABLE tienda ADD COLUMN id_empleado INT;
 ALTER TABLE tienda
     ADD CONSTRAINT id_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado);
+
+INSERT INTO categoria(nombre)
+SELECT lower(t.categoria_pelicula)
+FROM temporal AS t
+WHERE t.categoria_pelicula !='-'
+GROUP BY lower(t.categoria_pelicula);
+
+INSERT INTO actor(nombre,apellido)
+SELECT split_part(initcap(t.actor_pelicula), ' ', 1) AS nombre
+     	, split_part(initcap(t.actor_pelicula), ' ', 2) AS apellido
+FROM temporal AS t
+WHERE t.actor_pelicula !='-'
+GROUP BY t.actor_pelicula;
+
+INSERT INTO traduccion(nombre)
+SELECT lower(t.lenguaje_pelicula)
+FROM temporal AS t
+WHERE t.lenguaje_pelicula !='-'
+GROUP BY lower(t.lenguaje_pelicula);
+
+INSERT INTO pelicula(titulo,descripcion,ano,duracion,dias,costo,clasificacion)
+SELECT lower(nombre_pelicula),
+	   descripcion_pelicula,
+	   ano_lanzamiento::INT,
+	   duracion::INT,
+	   dias_renta::INT,
+	   costo_renta::DECIMAL,
+	   lower(clasificacion)
+FROM temporal
+WHERE nombre_pelicula != '-' AND
+	   descripcion_pelicula != '-' AND
+	   ano_lanzamiento != '-' AND
+	   duracion != '-' AND
+	   dias_renta != '-' AND
+	   costo_renta != '-' AND
+	   clasificacion != '-'
+GROUP BY lower(nombre_pelicula),
+	   descripcion_pelicula,
+	   ano_lanzamiento,
+	   duracion,
+	   dias_renta,
+	   costo_renta,
+	   lower(clasificacion);
+
+
+INSERT INTO pais(nombre)
+SELECT lower(t.pais_cliente)
+FROM temporal AS t
+WHERE t.pais_cliente !='-'
+GROUP BY lower(t.pais_cliente)
+UNION
+SELECT lower(t.pais_empleado)
+FROM temporal AS t
+WHERE t.pais_empleado !='-'
+GROUP BY lower(t.pais_empleado)
+UNION
+SELECT lower(t.pais_tienda)
+FROM temporal AS t
+WHERE t.pais_tienda !='-'
+GROUP BY lower(t.pais_tienda);
+
+
+INSERT INTO detalle_categoria(id_pelicula,id_categoria)
+SELECT p.id_pelicula, g.id_categoria 
+FROM temporal AS t 
+inner join pelicula AS p 
+ON p.titulo = lower(t.nombre_pelicula)
+inner join categoria g 
+ON g.nombre = lower(t.categoria_pelicula)
+group by p.id_pelicula, g.id_categoria ;
+
+
+INSERT INTO detalle_actor(id_pelicula, id_actor)
+SELECT p.id_pelicula, a.id_actor 
+FROM temporal AS t 
+inner join pelicula AS p 
+ON p.titulo = lower(t.nombre_pelicula)
+inner join actor a 
+ON (a.nombre = split_part(initcap(t.actor_pelicula), ' ', 1) AND 
+ a.apellido = split_part(initcap(t.actor_pelicula), ' ', 2))
+group by p.id_pelicula, a.id_actor ;
+
+INSERT INTO detalle_traduccion(id_pelicula,id_traduccion)
+SELECT p.id_pelicula, tr.id_traduccion 
+FROM temporal AS t 
+inner join pelicula AS p 
+ON p.titulo = lower(t.nombre_pelicula)
+inner join traduccion tr 
+ON tr.nombre = lower(t.lenguaje_pelicula)
+group by p.id_pelicula, tr.id_traduccion ;
+
+INSERT INTO ciudad(id_pais,nombre)
+SELECT p.id_pais, t.ciudad_cliente
+FROM temporal AS t 
+inner join pais AS p 
+ON p.nombre = lower(t.pais_cliente)
+WHERE t.ciudad_cliente != '-'
+group by p.id_pais, t.ciudad_cliente;
+
+INSERT INTO direccion (id_ciudad,distrito,codigo)
+SELECT c.id_ciudad, t.direccion_cliente, t.codigo_postal_cliente 
+FROM temporal AS t 
+inner join ciudad AS c 
+ON c.nombre = t.ciudad_cliente
+WHERE t.direccion_cliente != '-'
+group by c.id_ciudad, t.direccion_cliente, t.codigo_postal_cliente
+UNION 
+SELECT c.id_ciudad, t.direccion_tienda, t.codigo_postal_tienda 
+FROM temporal AS t 
+inner join ciudad AS c 
+ON c.nombre = t.ciudad_tienda
+WHERE t.direccion_tienda != '-'
+group by c.id_ciudad, t.direccion_tienda, t.codigo_postal_tienda
+UNION
+SELECT c.id_ciudad, t.direccion_empleado, t.codigo_postal_empleado 
+FROM temporal AS t 
+inner join ciudad AS c 
+ON c.nombre = t.ciudad_empleado
+WHERE t.direccion_empleado != '-'
+group by c.id_ciudad, t.direccion_empleado, t.codigo_postal_empleado;
+
+
+INSERT INTO tienda(id_direccion, nombre)
+SELECT d.id_direccion,t.nombre_tienda
+FROM temporal AS t 
+inner join direccion AS d 
+ON d.distrito = t.direccion_tienda
+WHERE t.nombre_tienda != '-'
+group by d.id_direccion,t.nombre_tienda;
+
+INSERT INTO cliente(id_tienda,id_direccion,nombre,apellido,correo,fecha_registro,activo)
+SELECT ti.id_tienda,d.id_direccion,
+split_part(initcap(t.nombre_cliente), ' ', 1) AS nombre,
+split_part(initcap(t.nombre_cliente), ' ', 2) AS apellido,
+t.correo_cliente, 
+to_date(t.fecha_creacion, 'DD-MM-YYYY'),
+t.cliente_activo
+FROM temporal AS t 
+inner join direccion AS d 
+ON d.distrito = t.direccion_cliente
+inner join tienda AS ti
+ON ti.nombre = t.tienda_preferida
+WHERE t.nombre_cliente != '-' AND
+t.correo_cliente != '-' AND
+t.fecha_creacion != '-' AND
+t.cliente_activo != '-' 
+group by d.id_direccion,ti.id_tienda,t.nombre_cliente, t.correo_cliente, t.fecha_creacion, t.cliente_activo
+
+INSERT INTO empleado(id_tienda,id_direccion,nombre,apellido,correo,activo,usuario,contrasena)
+SELECT ti.id_tienda,d.id_direccion,
+split_part(initcap(t.nombre_empleado), ' ', 1) AS nombre,
+split_part(initcap(t.nombre_empleado), ' ', 2) AS apellido,
+t.correo_empleado, 
+t.empleado_activo,
+t.usuario_empleado,
+t.contrasena_empleado
+FROM temporal AS t 
+inner join direccion AS d 
+ON d.distrito = t.direccion_empleado
+inner join tienda AS ti
+ON ti.nombre = t.tienda_empleado
+WHERE t.nombre_empleado != '-' AND
+t.correo_empleado != '-' AND
+t.fecha_creacion != '-' AND
+t.empleado_activo != '-' AND
+t.usuario_empleado != '-' AND
+t.contrasena_empleado != '-' 
+group by d.id_direccion,ti.id_tienda,t.nombre_empleado, t.correo_empleado, t.empleado_activo,t.usuario_empleado,t.contrasena_empleado
+
+INSERT INTO renta(id_cliente,id_empleado,id_pelicula,monto,fecha_renta,fecha_retorno,fecha_pago)
+SELECT id_cliente,e.id_empleado,p.id_pelicula,t.monto_a_pagar::DECIMAL,
+TO_TIMESTAMP(t.fecha_renta,'DD-MM-YYYY HH24:MI'),
+TO_TIMESTAMP(t.fecha_retorno,'DD-MM-YYYY HH24:MI'),
+TO_TIMESTAMP(t.fecha_pago,'DD-MM-YYYY HH24:MI')
+FROM temporal AS t 
+inner join empleado AS e 
+ON (e.nombre = split_part(initcap(t.nombre_empleado), ' ', 1) AND 
+ e.apellido = split_part(initcap(t.nombre_empleado), ' ', 2))
+inner join cliente AS c 
+ON (c.nombre = split_part(initcap(t.nombre_cliente), ' ', 1) AND 
+ c.apellido = split_part(initcap(t.nombre_cliente), ' ', 2))
+inner join pelicula AS p
+ON p.titulo = lower(t.nombre_pelicula)
+WHERE t.monto_a_pagar != '-' AND
+	t.fecha_renta != '-' AND
+	t.fecha_retorno != '-'
+group by c.id_cliente,e.id_empleado,p.id_pelicula,t.monto_a_pagar,t.fecha_renta,t.fecha_retorno,t.fecha_pago;
